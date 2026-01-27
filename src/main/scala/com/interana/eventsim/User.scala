@@ -6,7 +6,7 @@ import java.time.{ZoneOffset, LocalDateTime}
 import com.fasterxml.jackson.core.{JsonEncoding, JsonFactory}
 import com.interana.eventsim.config.ConfigFromFile
 
-import scala.util.parsing.json.JSONObject
+import ujson._
 
 class User(val alpha: Double,
            val beta: Double,
@@ -77,8 +77,7 @@ class User(val alpha: Double,
         "length" -> session.currentSong.get._4
         )
 
-    val j = new JSONObject(m)
-    j.toString()
+    ujson.write(User.anyToValue(m))
   }
 
 
@@ -140,4 +139,18 @@ class User(val alpha: Double,
 object User {
   protected val jsonFactory = new JsonFactory()
   jsonFactory.setRootValueSeparator("")
+
+  def anyToValue(value: Any): ujson.Value = value match {
+    case s: String  => ujson.Str(s)
+    case n: Double  => ujson.Num(n)
+    case n: Int     => ujson.Num(n.toDouble)
+    case b: Boolean => ujson.Bool(b)
+    case m: Map[String, Any] @unchecked =>
+      ujson.Obj.from(m.mapValues(anyToValue).toSeq)
+    case l: Iterable[Any] @unchecked =>
+      ujson.Arr.from(l.map(anyToValue))
+    case null => ujson.Null
+    case _ => ujson.Str(value.toString) // Fallback
+  }
+
 }

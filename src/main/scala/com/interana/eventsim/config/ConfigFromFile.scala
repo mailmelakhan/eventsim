@@ -4,6 +4,8 @@ import com.interana.eventsim.{Constants, State, WeightedRandomThingGenerator}
 
 import scala.collection.mutable
 import scala.io.Source
+import ujson._
+import upickle.core.LinkedHashMap
 
 /**
  *  Site configuration (loaded from JSON file, used to run simulation)
@@ -81,105 +83,81 @@ object ConfigFromFile {
 
     val s = Source.fromFile(fn)
     val rawContents = s.mkString
-    val jsonContents = (scala.util.parsing.json.JSON.parseFull(rawContents) match {
-      case e: Some[Any] => e.get
-      case _ => throw new Exception("Could not parse the state file")
-    }).asInstanceOf[Map[String,Any]]
+    val jsonContents = ujson.read(rawContents).obj
     s.close()
 
-    jsonContents.get(ALPHA) match {
-      case x: Some[Any] => alpha = x.get.asInstanceOf[Double]
-      case None =>
-    }
+    jsonContents.get(ALPHA)
+      .flatMap(v => v.numOpt)
+      .foreach(alpha = _)
 
-    jsonContents.get(BETA) match {
-      case x: Some[Any] => beta = x.get.asInstanceOf[Double]
-      case None =>
-    }
+    jsonContents.get(BETA)
+      .flatMap(v => v.numOpt)
+      .foreach(beta = _)
 
-    jsonContents.get(DAMPING) match {
-      case x: Some[Any] => damping = x.get.asInstanceOf[Double]
-      case None =>
-    }
+    jsonContents.get(DAMPING)
+      .flatMap(_.numOpt)
+      .foreach(damping = _)
 
-    jsonContents.get(WEEKEND_DAMPING) match {
-      case x: Some[Any] => weekendDamping = x.get.asInstanceOf[Double]
-      case None =>
-    }
+    jsonContents.get(WEEKEND_DAMPING)
+      .flatMap(_.numOpt)
+      .foreach(weekendDamping = _)
 
-    jsonContents.get(WEEKEND_DAMPING_OFFSET) match {
-        // in minutes
-      case x: Some[Any] => weekendDampingOffset = x.get.asInstanceOf[Double].toInt
-      case None =>
-    }
+    jsonContents.get(WEEKEND_DAMPING_OFFSET)
+      .flatMap(_.numOpt)
+      .foreach(v => weekendDampingOffset = v.toInt) // in minutes
 
-    jsonContents.get(WEEKEND_DAMPING_SCALE) match {
-        // in minutes
-      case x: Some[Any] => weekendDampingScale = x.get.asInstanceOf[Double].toInt
-      case None =>
-    }
+    jsonContents.get(WEEKEND_DAMPING_SCALE)
+      .flatMap(_.numOpt)
+      .foreach(v => weekendDampingScale = v.toInt) // in minutes
 
-    jsonContents.get(SEED) match {
-      case x: Some[Any] => seed = x.get.asInstanceOf[Double].toLong
-      case None =>
-    }
+    jsonContents.get(SEED)
+      .flatMap(_.numOpt)
+      .foreach(v => seed = v.toLong)
 
-    jsonContents.get(SESSION_GAP) match {
-      case x: Some[Any] => sessionGap = x.get.asInstanceOf[Double].toInt
-      case None =>
-    }
+    jsonContents.get(SESSION_GAP)
+      .flatMap(_.numOpt)
+      .foreach(v => sessionGap = v.toInt)
 
-    jsonContents.get(NEW_USER_AUTH) match {
-      case x: Some[Any] => newUserAuth = x.get.asInstanceOf[String]
-      case None =>
-    }
+    jsonContents.get(NEW_USER_AUTH)
+      .flatMap(_.strOpt)
+      .foreach(newUserAuth = _)
 
-    jsonContents.get(NEW_USER_LEVEL) match {
-      case x: Some[Any] => newUserLevel = x.get.asInstanceOf[String]
-      case None =>
-    }
+    jsonContents.get(NEW_USER_LEVEL)
+      .flatMap(_.strOpt)
+      .foreach(newUserLevel = _)
 
-    jsonContents.get(START_DATE) match {
-      case x: Some[Any] => startDate = Some(x.get.asInstanceOf[String])
-      case None =>
-    }
+    startDate = jsonContents.get(START_DATE)
+      .flatMap(_.strOpt)
 
-    jsonContents.get(END_DATE) match {
-      case x: Some[Any] => endDate = Some(x.get.asInstanceOf[String])
-      case None =>
-    }
+    endDate = jsonContents.get(END_DATE)
+      .flatMap(_.strOpt)
 
-    jsonContents.get(N_USERS) match {
-      case x: Some[Any] => nUsers = Some(x.get.asInstanceOf[Double].toInt)
-      case None =>
-    }
+    nUsers = jsonContents.get(N_USERS)
+      .flatMap(_.numOpt)
+      .map(_.toInt)
 
-    jsonContents.get(FIRST_USER_ID) match {
-      case x: Some[Any] => firstUserId = Some(x.get.asInstanceOf[Double].toInt)
-      case None =>
-    }
+    firstUserId = jsonContents.get(FIRST_USER_ID)
+      .flatMap(_.numOpt)
+      .map(_.toInt)
 
-    jsonContents.get(GROWTH_RATE) match {
-      case x: Some[Any] => growthRate = Some(x.get.asInstanceOf[Double])
-      case None =>
-    }
+    growthRate = jsonContents.get(GROWTH_RATE)
+      .flatMap(_.numOpt)
 
-    jsonContents.get(TAG) match {
-      case x: Some[Any] => tag = Some(x.get.asInstanceOf[String])
-      case None =>
-    }
+    tag = jsonContents.get(TAG)
+      .flatMap(_.strOpt)
 
-
-    churnedState = jsonContents.get(CHURNED_STATE).asInstanceOf[Option[String]]
+    churnedState = jsonContents.get(CHURNED_STATE)
+      .flatMap(_.strOpt)
 
     val states = new mutable.HashMap[(String,String,Int,String,String), State]
 
-    val transitions = jsonContents.getOrElse(TRANSITIONS,List()).asInstanceOf[List[Any]]
+    val transitions: List[Value] = jsonContents.get(TRANSITIONS).flatMap(_.arrOpt).map(_.toList).getOrElse(List())
+
     for (t <- transitions) {
-      val transition = t.asInstanceOf[Map[String,Any]]
-      val source = readState(transition.getOrElse(SOURCE,List()).asInstanceOf[Map[String,Any]])
-      val dest = readState(transition.getOrElse(DEST,List()).asInstanceOf[Map[String,Any]])
-      val p      = transition.getOrElse(P,Unit).asInstanceOf[Double]
+      val transition: LinkedHashMap[String, Value] = t.obj
+      val source = readState(transition(SOURCE).obj)
+      val dest = readState(transition(DEST).obj)
+      val p      = transition(P).num
 
       if (!states.contains(source)) {
         states += (source ->
@@ -193,10 +171,10 @@ object ConfigFromFile {
         .addLateral(states(dest),p)
     }
 
-    val initial = jsonContents.getOrElse(NEW_SESSION,List()).asInstanceOf[List[Any]]
+    val initial: List[Value] = jsonContents.get(NEW_SESSION).flatMap(_.arrOpt).map(_.toList).getOrElse(List())
     for (i <- initial) {
-      val item = i.asInstanceOf[Map[String,Any]]
-      val weight = item.get(WEIGHT).get.asInstanceOf[Double].toInt
+      val item = i.obj
+      val weight = item(WEIGHT).num.toInt
       val stateTuple = readState(item)
       val (_,auth,_,_,level) = stateTuple
       if (!initialStates.contains((auth,level)))
@@ -204,42 +182,42 @@ object ConfigFromFile {
       if (!states.contains(stateTuple))
         throw new Exception("Unkown state found while processing initial states: " + stateTuple.toString())
 
-      initialStates(auth,level).add(states.get(stateTuple).get, weight)
+      initialStates(auth,level).add(states(stateTuple), weight)
     }
 
     // TODO: put in check for initial state probabilities
 
-    val showUserDetails = jsonContents.getOrElse(SHOW_USER_DETAILS,List()).asInstanceOf[List[Any]]
+    val showUserDetails: List[Value] = jsonContents.get(SHOW_USER_DETAILS).map(_.arr.toList).getOrElse(List())
     for (i <- showUserDetails) {
-      val item = i.asInstanceOf[Map[String,Any]]
-      val auth = item.get(AUTH).get.asInstanceOf[String]
-      val show     = item.get(SHOW).get.asInstanceOf[Boolean]
+      val item = i.obj
+      val auth = item(AUTH).str
+      val show     = item(SHOW).bool
       showUserWithState += (auth -> show)
     }
 
-    val levels = jsonContents.getOrElse(LEVELS,List()).asInstanceOf[List[Any]]
+    val levels = jsonContents.get(LEVELS).map(_.arr.toList).getOrElse(List())
     for (level <- levels) {
-      val item = level.asInstanceOf[Map[String,Any]]
-      val levelName = item.getOrElse(LEVEL,"").asInstanceOf[String]
-      val levelWeight = item.getOrElse(WEIGHT,0.0).asInstanceOf[Double].toInt
+      val item = level.obj
+      val levelName = item.get(LEVEL).flatMap(_.strOpt).getOrElse("")
+      val levelWeight = item.get(WEIGHT).flatMap(_.numOpt).map(_.toInt).getOrElse(0)
       levelGenerator.add(levelName,levelWeight)
     }
 
-    val auths = jsonContents.getOrElse(AUTHS,List()).asInstanceOf[List[Any]]
+    val auths = jsonContents.get(AUTHS).map(_.arr.toList).getOrElse(List())
     for (auth <- auths) {
-      val item = auth.asInstanceOf[Map[String,Any]]
-      val levelName = item.getOrElse(AUTH,"").asInstanceOf[String]
-      val levelWeight = item.getOrElse(WEIGHT,0.0).asInstanceOf[Double].toInt
+      val item = auth.obj
+      val levelName = item.get(AUTH).flatMap(_.strOpt).getOrElse("")
+      val levelWeight = item.get(WEIGHT).flatMap(_.numOpt).map(_.toInt).getOrElse(0)
       authGenerator.add(levelName,levelWeight)
     }
 
   }
 
-  def readState(m: Map[String,Any]) =
-    (m.get(PAGE).get.asInstanceOf[String],
-     m.get(AUTH).get.asInstanceOf[String],
-     m.getOrElse(STATUS,"").asInstanceOf[Double].toInt,
-     m.getOrElse(METHOD,"").asInstanceOf[String],
-     m.getOrElse(LEVEL, "").asInstanceOf[String])
+  private def readState(m: LinkedHashMap[String,Value]): (String, String, Int, String, String) =
+    (m(PAGE).str,
+     m(AUTH).str,
+     m.get(STATUS).map(_.num.toInt).getOrElse(0),
+     m.get(METHOD).map(_.str).getOrElse(""),
+     m.get(LEVEL).map(_.str).getOrElse(""))
 
 }

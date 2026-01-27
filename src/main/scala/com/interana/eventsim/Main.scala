@@ -80,6 +80,8 @@ object Main extends App {
 
   }
 
+  ConfFromOptions.verify()
+
   val startTime = if (ConfFromOptions.startTimeArg.isSupplied) {
     LocalDateTime.parse(ConfFromOptions.startTimeArg())
   } else if (ConfigFromFile.startDate.nonEmpty) {

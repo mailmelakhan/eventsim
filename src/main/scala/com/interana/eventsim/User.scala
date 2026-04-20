@@ -87,8 +87,10 @@ class User(val alpha: Double,
     // use Jackson streaming to maximize efficiency
     // (earlier versions used Scala's std JSON generators, but they were slow)
     val showUserDetails = ConfigFromFile.showUserWithState(session.currentState.auth)
+    val instant = session.nextEventTimeStamp.get.toInstant(ZoneOffset.UTC)
     writer.writeStartObject()
-    writer.writeNumberField("ts", session.nextEventTimeStamp.get.toInstant(ZoneOffset.UTC)toEpochMilli())
+    writer.writeNumberField("ts", instant.toEpochMilli)
+    writer.writeStringField("timestamp", instant.toString)
     writer.writeStringField("userId", if (showUserDetails) userId.toString else "")
     writer.writeNumberField("sessionId", session.sessionId)
     writer.writeStringField("page", session.currentState.page)

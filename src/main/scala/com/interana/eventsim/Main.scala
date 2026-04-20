@@ -1,16 +1,17 @@
 package com.interana.eventsim
 
+import com.interana.eventsim.Utilities.{SimilarSongParser, TrackListenCount}
+import com.interana.eventsim.buildin.{DeviceProperties, UserProperties}
+import com.interana.eventsim.config.ConfigFromFile
+import org.apache.kafka.clients.CommonClientConfigs
+import org.apache.kafka.clients.producer.{KafkaProducer, ProducerConfig}
+import org.apache.kafka.common.config.SaslConfigs
+import org.rogach.scallop.{ScallopConf, ScallopOption}
+
 import java.io.FileOutputStream
 import java.time.temporal.ChronoUnit
 import java.time.{Duration, LocalDateTime, ZoneOffset}
 import java.util.Properties
-
-import com.interana.eventsim.Utilities.{SimilarSongParser, TrackListenCount}
-import com.interana.eventsim.buildin.{DeviceProperties, UserProperties}
-import com.interana.eventsim.config.ConfigFromFile
-import kafka.producer.{Producer, ProducerConfig}
-import org.rogach.scallop.{ScallopOption, ScallopConf}
-
 import scala.collection.mutable
 
 object Main extends App {
@@ -120,9 +121,15 @@ object Main extends App {
 
   val kafkaProducer = if (ConfFromOptions.kafkaBrokerList.isDefined) {
     val kafkaProperties = new Properties()
-    kafkaProperties.setProperty("metadata.broker.list", ConfFromOptions.kafkaBrokerList.get.get)
-    val producerConfig = new ProducerConfig(kafkaProperties)
-    new Some(new Producer[Array[Byte],Array[Byte]](producerConfig))
+    kafkaProperties.setProperty(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, ConfFromOptions.kafkaBrokerList.toOption.get)
+    kafkaProperties.setProperty(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, "SASL_SSL")
+    kafkaProperties.setProperty(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
+    kafkaProperties.setProperty(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.ByteArraySerializer")
+    kafkaProperties.setProperty(SaslConfigs.SASL_MECHANISM, "OAUTHBEARER")
+    kafkaProperties.setProperty(SaslConfigs.SASL_LOGIN_CALLBACK_HANDLER_CLASS, "com.google.cloud.hosted.kafka.auth.GcpLoginCallbackHandler")
+    kafkaProperties.setProperty(SaslConfigs.SASL_JAAS_CONFIG, "org.apache.kafka.common.security.oauthbearer.OAuthBearerLoginModule required;")
+
+    Some(new KafkaProducer[Array[Byte], Array[Byte]](kafkaProperties))
   } else None
 
   val realTime = ConfFromOptions.realTime.get.get
@@ -130,7 +137,7 @@ object Main extends App {
   def generateEvents() = {
 
     val out = if (kafkaProducer.nonEmpty) {
-      new KafkaOutputStream(kafkaProducer.get, ConfFromOptions.kafkaTopic.get.get)
+      new KafkaOutputStream(kafkaProducer.get, ConfFromOptions.kafkaTopic.toOption.get)
     } else if (ConfFromOptions.outputFile.isSupplied) {
       new FileOutputStream(ConfFromOptions.outputFile())
     } else {

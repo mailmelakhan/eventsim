@@ -1,5 +1,5 @@
 # Stage 1: Build Stage
-FROM sbtscala/scala-sbt:eclipse-temurin-25.0.1_8_1.12.0_2.13.18 AS build
+FROM sbtscala/scala-sbt:eclipse-temurin-25.0.1_8_1.12.0_2.12.21 AS build
 
 # Set the working directory
 WORKDIR /app
